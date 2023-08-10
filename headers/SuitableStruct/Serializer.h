@@ -23,6 +23,8 @@
 
 namespace SuitableStruct {
 
+extern const Buffer ssMagic;
+
 // Versions
 template<typename T>
 void ssWriteVersion(Buffer& buf)
@@ -111,11 +113,14 @@ Buffer ssSave(const T& obj, bool protectedMode)
     if (protectedMode) {
         Buffer part;
         ssWriteVersion<T>(part);
+        part.write((uint32_t)0); // T magic
         part += ssSaveImpl(obj);
 
         static_assert (sizeof(part.hash()) == sizeof(uint32_t), "Make sure save & load expect same type!");
         result.write((uint64_t)part.size());
         result.write(part.hash());
+        result.write(ssMagic);     // SS magic
+        result.write((uint64_t)0); // SS version & flags
         result += part;
     } else {
         ssWriteVersion<T>(result);
@@ -269,10 +274,16 @@ void ssLoad(BufferReader& buffer, T& obj, bool protectedMode = true)
     if (protectedMode) {
         T temp;
 
+        uint64_t ssVersionAndFlags;
         uint64_t size;
         decltype(std::declval<Buffer>().hash()) /*uint32*/ hash;
         buffer.read(size);
         buffer.read(hash);
+        const auto gotSsMagic = buffer.readRaw(ssMagic.size()); // SS magic
+        buffer.read(ssVersionAndFlags);                         // SS version & flags
+
+        if (gotSsMagic.bufferMapped() != ssMagic || ssVersionAndFlags != 0)
+            Internal::throwIntegrity();
 
         if (size > std::numeric_limits<size_t>::max())
             Internal::throwTooLarge();
@@ -284,6 +295,8 @@ void ssLoad(BufferReader& buffer, T& obj, bool protectedMode = true)
             Internal::throwIntegrity();
 
         auto ver = ssReadVersion<T>(groupData);
+        auto tMagic = groupData.read<uint32_t>(); // (unused)
+        (void)tMagic;
         ssLoadAndConvert(groupData, temp, ver);
         obj = std::move(temp);
 

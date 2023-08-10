@@ -74,6 +74,14 @@ public:
              typename std::enable_if_t<std::is_fundamental_v<T> || std::is_enum_v<T>>* = nullptr>
     void read(T& data) { readRaw(&data, sizeof(data)); }
 
+    template<typename T,
+             typename std::enable_if_t<std::is_fundamental_v<T> || std::is_enum_v<T>>* = nullptr>
+    T read() {
+        T data;
+        readRaw(&data, sizeof(data));
+        return data;
+    }
+
 private:
     void checkPosition(size_t sz) const;
 
